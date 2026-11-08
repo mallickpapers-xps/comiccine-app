@@ -6,7 +6,7 @@
     <application
         android:label="ComicCine"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher"
+        android:icon="@drawable/ic_launcher"
         android:requestLegacyExternalStorage="true">
         <activity
             android:name=".MainActivity"
@@ -24,7 +24,6 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
-        <!-- এই লাইনটি V2 Embedding এর জন্য সবচেয়ে গুরুত্বপূর্ণ -->
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
