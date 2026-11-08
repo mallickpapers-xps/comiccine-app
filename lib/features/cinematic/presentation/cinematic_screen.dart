@@ -6,7 +6,6 @@ import 'package:photo_view/photo_view.dart';
 
 enum ViewMode { normal, mobile, cinematic }
 
-// A class to represent a cinematic "Shot" (Panel or Dialogue Box)
 class CinematicShot {
   final double x;
   final double y;
@@ -34,9 +33,9 @@ class _CinematicScreenState extends State<CinematicScreen> with TickerProviderSt
   List<String> _comicPages = [];
   int _currentPage = 0;
   
-  // Cinematic Animation Variables
+  // Cinematic Animation Variables (Fixed Null Safety)
   late AnimationController _animationController;
-  late Animation<Rect> _cameraAnimation;
+  Animation<Rect?>? _cameraAnimation;
   bool _isPlayingCinematic = false;
   int _currentShotIndex = 0;
   List<CinematicShot> _shots = [];
@@ -47,7 +46,7 @@ class _CinematicScreenState extends State<CinematicScreen> with TickerProviderSt
     _loadContent();
     _animationController = AnimationController(vsync: this, duration: const Duration(seconds: 2));
     _animationController.addListener(() {
-      setState(() {}); // Rebuild to update camera position
+      setState(() {}); 
     });
     _animationController.addStatusListener((status) {
       if (status == AnimationStatus.completed && _isPlayingCinematic) {
@@ -70,16 +69,11 @@ class _CinematicScreenState extends State<CinematicScreen> with TickerProviderSt
     if (mounted) setState(() {});
   }
 
-  // Smart Heuristic to generate reading zones (Simulating AI Panel/Bubble Detection)
   void _generateCinematicShots(double imageWidth, double imageHeight) {
     _shots = [
-      // Shot 1: Top-Left (Usually first panel)
       CinematicShot(x: 0, y: 0, width: imageWidth * 0.6, height: imageHeight * 0.5),
-      // Shot 2: Top-Right (Dialogue or second panel)
       CinematicShot(x: imageWidth * 0.4, y: 0, width: imageWidth * 0.6, height: imageHeight * 0.5),
-      // Shot 3: Bottom-Left
       CinematicShot(x: 0, y: imageHeight * 0.5, width: imageWidth * 0.5, height: imageHeight * 0.5),
-      // Shot 4: Bottom-Right
       CinematicShot(x: imageWidth * 0.5, y: imageHeight * 0.5, width: imageWidth * 0.5, height: imageHeight * 0.5),
     ];
   }
@@ -103,9 +97,11 @@ class _CinematicScreenState extends State<CinematicScreen> with TickerProviderSt
     final shot = _shots[_currentShotIndex];
     final targetRect = Rect.fromLTWH(shot.x, shot.y, shot.width, shot.height);
     
-    // Animate camera to the target rect
+    // Fixed: Provide safe non-null default for begin value
+    final beginRect = _cameraAnimation?.value ?? Rect.fromLTWH(0, 0, 800, 1200);
+    
     _cameraAnimation = RectTween(
-      begin: _cameraAnimation?.value ?? Rect.fromLTWH(0, 0, 1000, 1000),
+      begin: beginRect,
       end: targetRect,
     ).animate(CurvedAnimation(parent: _animationController, curve: Curves.easeInOut));
 
@@ -156,8 +152,7 @@ class _CinematicScreenState extends State<CinematicScreen> with TickerProviderSt
         children: [
           Center(child: _buildViewer()),
           
-          // Cinematic Play/Stop Button (Floating)
-          if (widget.type != 'pdf') // PDF has its own viewer, this is best for images/comics
+          if (widget.type != 'pdf')
             Positioned(
               bottom: 100,
               left: 20,
@@ -169,7 +164,6 @@ class _CinematicScreenState extends State<CinematicScreen> with TickerProviderSt
                   if (_isPlayingCinematic) {
                     _stopCinematicPlayback();
                   } else {
-                    // Assuming a standard comic page ratio for demo (e.g., 800x1200)
                     _startCinematicPlayback(800, 1200); 
                   }
                 },
@@ -195,9 +189,9 @@ class _CinematicScreenState extends State<CinematicScreen> with TickerProviderSt
         itemBuilder: (context, index) {
           return LayoutBuilder(
             builder: (context, constraints) {
-              // Apply cinematic camera transform if playing
-              if (_isPlayingCinematic && _cameraAnimation != null) {
-                final rect = _cameraAnimation!.value;
+              // Fixed: Safely check for null value
+              if (_isPlayingCinematic && _cameraAnimation?.value != null) {
+                final rect = _cameraAnimation!.value!;
                 final scaleX = constraints.maxWidth / rect.width;
                 final scaleY = constraints.maxHeight / rect.height;
                 final scale = min(scaleX, scaleY);
@@ -219,7 +213,6 @@ class _CinematicScreenState extends State<CinematicScreen> with TickerProviderSt
                 );
               }
               
-              // Normal View
               return PhotoView(
                 imageProvider: FileImage(File(_comicPages[index])),
                 minScale: PhotoViewComputedScale.contained,
