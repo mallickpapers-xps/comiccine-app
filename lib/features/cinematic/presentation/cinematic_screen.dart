@@ -49,7 +49,7 @@ class _CinematicScreenState extends State<CinematicScreen> {
         _comicPages.sort();
       }
     }
-    setState(() {});
+    if (mounted) setState(() {});
   }
 
   @override
@@ -120,7 +120,7 @@ class _CinematicScreenState extends State<CinematicScreen> {
               ),
             ),
 
-          // Floating Zoom Controls
+          // Floating Zoom Controls (Hint for native pinch-to-zoom)
           Positioned(
             bottom: 30,
             right: 20,
@@ -132,8 +132,9 @@ class _CinematicScreenState extends State<CinematicScreen> {
                   backgroundColor: Colors.black54,
                   child: const Icon(Icons.add, color: Colors.white),
                   onPressed: () {
-                    if (widget.type == 'pdf') _pdfController?.zoomIn();
-                    // PhotoView handles pinch natively, button zoom can be added via controller if needed
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Use two fingers to pinch and zoom in'), duration: Duration(seconds: 2)),
+                    );
                   },
                 ),
                 const SizedBox(height: 10),
@@ -143,7 +144,9 @@ class _CinematicScreenState extends State<CinematicScreen> {
                   backgroundColor: Colors.black54,
                   child: const Icon(Icons.remove, color: Colors.white),
                   onPressed: () {
-                    if (widget.type == 'pdf') _pdfController?.zoomOut();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Use two fingers to pinch and zoom out'), duration: Duration(seconds: 2)),
+                    );
                   },
                 ),
               ],
@@ -161,8 +164,6 @@ class _CinematicScreenState extends State<CinematicScreen> {
           : PdfView(
               controller: _pdfController!,
               scrollDirection: _currentMode == ViewMode.cinematic ? Axis.horizontal : Axis.vertical,
-              pageLoader: const Center(child: CircularProgressIndicator(color: Colors.blue)),
-              errorBuilder: (error) => Center(child: Text('Error: $error', style: const TextStyle(color: Colors.red))),
             );
     } 
     
