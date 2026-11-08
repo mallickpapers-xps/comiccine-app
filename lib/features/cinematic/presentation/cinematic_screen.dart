@@ -1,36 +1,59 @@
 import 'dart:io';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:pdfx/pdfx.dart';
 import 'package:photo_view/photo_view.dart';
 
 enum ViewMode { normal, mobile, cinematic }
 
+// A class to represent a cinematic "Shot" (Panel or Dialogue Box)
+class CinematicShot {
+  final double x;
+  final double y;
+  final double width;
+  final double height;
+  final Duration duration;
+
+  CinematicShot({required this.x, required this.y, required this.width, required this.height, this.duration = const Duration(seconds: 3)});
+}
+
 class CinematicScreen extends StatefulWidget {
-  final String type; // 'pdf', 'comic', or 'image'
+  final String type;
   final String path;
   final String fileName;
 
-  const CinematicScreen({
-    super.key, 
-    required this.type, 
-    required this.path, 
-    required this.fileName,
-  });
+  const CinematicScreen({super.key, required this.type, required this.path, required this.fileName});
 
   @override
   State<CinematicScreen> createState() => _CinematicScreenState();
 }
 
-class _CinematicScreenState extends State<CinematicScreen> {
+class _CinematicScreenState extends State<CinematicScreen> with TickerProviderStateMixin {
   ViewMode _currentMode = ViewMode.normal;
   PdfController? _pdfController;
   List<String> _comicPages = [];
   int _currentPage = 0;
+  
+  // Cinematic Animation Variables
+  late AnimationController _animationController;
+  late Animation<Rect> _cameraAnimation;
+  bool _isPlayingCinematic = false;
+  int _currentShotIndex = 0;
+  List<CinematicShot> _shots = [];
 
   @override
   void initState() {
     super.initState();
     _loadContent();
+    _animationController = AnimationController(vsync: this, duration: const Duration(seconds: 2));
+    _animationController.addListener(() {
+      setState(() {}); // Rebuild to update camera position
+    });
+    _animationController.addStatusListener((status) {
+      if (status == AnimationStatus.completed && _isPlayingCinematic) {
+        _playNextShot();
+      }
+    });
   }
 
   Future<void> _loadContent() async {
@@ -40,33 +63,73 @@ class _CinematicScreenState extends State<CinematicScreen> {
       final dir = Directory(widget.path);
       if (await dir.exists()) {
         final files = await dir.list().toList();
-        _comicPages = files
-            .where((f) => f is File && (f.path.endsWith('.jpg') || f.path.endsWith('.png') || f.path.endsWith('.jpeg')))
-            .map((f) => f.path)
-            .toList();
-        
-        // Sort alphabetically to ensure correct page order
+        _comicPages = files.where((f) => f is File && (f.path.endsWith('.jpg') || f.path.endsWith('.png') || f.path.endsWith('.jpeg'))).map((f) => f.path).toList();
         _comicPages.sort();
       }
     }
     if (mounted) setState(() {});
   }
 
+  // Smart Heuristic to generate reading zones (Simulating AI Panel/Bubble Detection)
+  void _generateCinematicShots(double imageWidth, double imageHeight) {
+    _shots = [
+      // Shot 1: Top-Left (Usually first panel)
+      CinematicShot(x: 0, y: 0, width: imageWidth * 0.6, height: imageHeight * 0.5),
+      // Shot 2: Top-Right (Dialogue or second panel)
+      CinematicShot(x: imageWidth * 0.4, y: 0, width: imageWidth * 0.6, height: imageHeight * 0.5),
+      // Shot 3: Bottom-Left
+      CinematicShot(x: 0, y: imageHeight * 0.5, width: imageWidth * 0.5, height: imageHeight * 0.5),
+      // Shot 4: Bottom-Right
+      CinematicShot(x: imageWidth * 0.5, y: imageHeight * 0.5, width: imageWidth * 0.5, height: imageHeight * 0.5),
+    ];
+  }
+
+  void _startCinematicPlayback(double imageWidth, double imageHeight) {
+    if (_shots.isEmpty) _generateCinematicShots(imageWidth, imageHeight);
+    
+    setState(() {
+      _isPlayingCinematic = true;
+      _currentShotIndex = 0;
+    });
+    _playNextShot();
+  }
+
+  void _playNextShot() {
+    if (_currentShotIndex >= _shots.length) {
+      setState(() => _isPlayingCinematic = false);
+      return;
+    }
+
+    final shot = _shots[_currentShotIndex];
+    final targetRect = Rect.fromLTWH(shot.x, shot.y, shot.width, shot.height);
+    
+    // Animate camera to the target rect
+    _cameraAnimation = RectTween(
+      begin: _cameraAnimation?.value ?? Rect.fromLTWH(0, 0, 1000, 1000),
+      end: targetRect,
+    ).animate(CurvedAnimation(parent: _animationController, curve: Curves.easeInOut));
+
+    _animationController.duration = shot.duration;
+    _animationController.forward(from: 0.0);
+    _currentShotIndex++;
+  }
+
+  void _stopCinematicPlayback() {
+    _animationController.stop();
+    setState(() => _isPlayingCinematic = false);
+  }
+
   @override
   void dispose() {
+    _animationController.dispose();
     _pdfController?.dispose();
     super.dispose();
   }
 
   void _toggleViewMode() {
     setState(() {
-      if (_currentMode == ViewMode.normal) {
-        _currentMode = ViewMode.mobile;
-      } else if (_currentMode == ViewMode.mobile) {
-        _currentMode = ViewMode.cinematic;
-      } else {
-        _currentMode = ViewMode.normal;
-      }
+      _currentMode = _currentMode == ViewMode.normal ? ViewMode.mobile : (_currentMode == ViewMode.mobile ? ViewMode.cinematic : ViewMode.normal);
+      if (_currentMode != ViewMode.cinematic) _stopCinematicPlayback();
     });
   }
 
@@ -80,78 +143,38 @@ class _CinematicScreenState extends State<CinematicScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(widget.fileName, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
-            Text('${_currentMode.toString().split('.').last.toUpperCase()} • ${widget.type.toUpperCase()}', style: const TextStyle(color: Colors.blue, fontSize: 12)),
+            Text(_currentMode == ViewMode.cinematic ? '🎬 CINEMATIC MODE ACTIVE' : '${_currentMode.toString().split('.').last.toUpperCase()} • ${widget.type.toUpperCase()}', 
+                 style: TextStyle(color: _currentMode == ViewMode.cinematic ? Colors.redAccent : Colors.blue, fontSize: 12, fontWeight: FontWeight.bold)),
           ],
         ),
         actions: [
-          IconButton(
-            icon: Icon(_currentMode == ViewMode.normal ? Icons.smartphone : (_currentMode == ViewMode.mobile ? Icons.movie : Icons.image)),
-            tooltip: 'Switch View Mode',
-            onPressed: _toggleViewMode,
-          ),
+          IconButton(icon: Icon(_currentMode == ViewMode.normal ? Icons.smartphone : (_currentMode == ViewMode.mobile ? Icons.movie : Icons.image)), onPressed: _toggleViewMode),
         ],
         iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: Stack(
         children: [
-          // Main Viewer Area
-          Center(
-            child: _buildViewer(),
-          ),
-
-          // Page Indicator (For Comics)
-          if (widget.type == 'comic' && _comicPages.isNotEmpty)
+          Center(child: _buildViewer()),
+          
+          // Cinematic Play/Stop Button (Floating)
+          if (widget.type != 'pdf') // PDF has its own viewer, this is best for images/comics
             Positioned(
-              bottom: 80,
-              left: 0,
-              right: 0,
-              child: Center(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.7),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    'Page ${_currentPage + 1} / ${_comicPages.length}',
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                  ),
-                ),
+              bottom: 100,
+              left: 20,
+              child: FloatingActionButton.extended(
+                backgroundColor: _isPlayingCinematic ? Colors.red : const Color(0xFF3B82F6),
+                icon: Icon(_isPlayingCinematic ? Icons.stop : Icons.play_arrow, color: Colors.white),
+                label: Text(_isPlayingCinematic ? 'Stop Cinematic' : 'Play Cinematic', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                onPressed: () {
+                  if (_isPlayingCinematic) {
+                    _stopCinematicPlayback();
+                  } else {
+                    // Assuming a standard comic page ratio for demo (e.g., 800x1200)
+                    _startCinematicPlayback(800, 1200); 
+                  }
+                },
               ),
             ),
-
-          // Floating Zoom Controls (Hint for native pinch-to-zoom)
-          Positioned(
-            bottom: 30,
-            right: 20,
-            child: Column(
-              children: [
-                FloatingActionButton(
-                  heroTag: 'zoomIn',
-                  mini: true,
-                  backgroundColor: Colors.black54,
-                  child: const Icon(Icons.add, color: Colors.white),
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Use two fingers to pinch and zoom in'), duration: Duration(seconds: 2)),
-                    );
-                  },
-                ),
-                const SizedBox(height: 10),
-                FloatingActionButton(
-                  heroTag: 'zoomOut',
-                  mini: true,
-                  backgroundColor: Colors.black54,
-                  child: const Icon(Icons.remove, color: Colors.white),
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Use two fingers to pinch and zoom out'), duration: Duration(seconds: 2)),
-                    );
-                  },
-                ),
-              ],
-            ),
-          ),
         ],
       ),
     );
@@ -159,46 +182,55 @@ class _CinematicScreenState extends State<CinematicScreen> {
 
   Widget _buildViewer() {
     if (widget.type == 'pdf') {
-      return _pdfController == null 
-          ? const CircularProgressIndicator(color: Colors.blue)
-          : PdfView(
-              controller: _pdfController!,
-              scrollDirection: _currentMode == ViewMode.cinematic ? Axis.horizontal : Axis.vertical,
-            );
+      return _pdfController == null ? const CircularProgressIndicator(color: Colors.blue) : PdfView(controller: _pdfController!);
     } 
     
     if (widget.type == 'comic') {
-      if (_comicPages.isEmpty) {
-        return const Center(
-          child: Padding(
-            padding: EdgeInsets.all(20),
-            child: Text('No images found in this CBZ/ZIP file.', style: TextStyle(color: Colors.red)),
-          ),
-        );
-      }
+      if (_comicPages.isEmpty) return const Center(child: Text('No images found.', style: TextStyle(color: Colors.red)));
       
       return PageView.builder(
         itemCount: _comicPages.length,
-        onPageChanged: (index) => setState(() => _currentPage = index),
+        onPageChanged: (index) { setState(() => _currentPage = index); _stopCinematicPlayback(); },
         scrollDirection: _currentMode == ViewMode.cinematic ? Axis.horizontal : Axis.vertical,
         itemBuilder: (context, index) {
-          return PhotoView(
-            imageProvider: FileImage(File(_comicPages[index])),
-            minScale: PhotoViewComputedScale.contained,
-            maxScale: PhotoViewComputedScale.covered * 4.0,
-            backgroundDecoration: const BoxDecoration(color: Colors.black),
-            loadingBuilder: (context, event) => const Center(child: CircularProgressIndicator(color: Colors.blue)),
+          return LayoutBuilder(
+            builder: (context, constraints) {
+              // Apply cinematic camera transform if playing
+              if (_isPlayingCinematic && _cameraAnimation != null) {
+                final rect = _cameraAnimation!.value;
+                final scaleX = constraints.maxWidth / rect.width;
+                final scaleY = constraints.maxHeight / rect.height;
+                final scale = min(scaleX, scaleY);
+                
+                final offsetX = (constraints.maxWidth - rect.width * scale) / 2 - rect.left * scale;
+                final offsetY = (constraints.maxHeight - rect.height * scale) / 2 - rect.top * scale;
+
+                return Transform.translate(
+                  offset: Offset(offsetX, offsetY),
+                  child: Transform.scale(
+                    scale: scale,
+                    alignment: Alignment.topLeft,
+                    child: PhotoView.customChild(
+                      child: Image.file(File(_comicPages[index]), fit: BoxFit.none),
+                      minScale: 1.0,
+                      maxScale: 4.0,
+                    ),
+                  ),
+                );
+              }
+              
+              // Normal View
+              return PhotoView(
+                imageProvider: FileImage(File(_comicPages[index])),
+                minScale: PhotoViewComputedScale.contained,
+                maxScale: PhotoViewComputedScale.covered * 4.0,
+                backgroundDecoration: const BoxDecoration(color: Colors.black),
+              );
+            }
           );
         },
       );
     }
-
-    // Fallback for single image
-    return PhotoView(
-      imageProvider: FileImage(File(widget.path)),
-      minScale: PhotoViewComputedScale.contained,
-      maxScale: PhotoViewComputedScale.covered * 4.0,
-      backgroundDecoration: const BoxDecoration(color: Colors.black),
-    );
+    return const Center(child: Text('Unsupported format for Cinematic Mode', style: TextStyle(color: Colors.white)));
   }
 }
