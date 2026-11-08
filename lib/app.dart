@@ -19,13 +19,14 @@ class ComicCineApp extends StatelessWidget {
         GoRoute(
           path: '/cinematic',
           builder: (context, state) {
-            // Query parameters থেকে পাথ এবং নাম বের করা
-            final filePath = state.uri.queryParameters['path'] ?? 'Unknown Path';
-            final fileName = state.uri.queryParameters['name'] ?? 'Unknown File';
+            final type = state.uri.queryParameters['type'] ?? 'image';
+            final path = state.uri.queryParameters['path'] ?? 'Unknown Path';
+            final name = state.uri.queryParameters['name'] ?? 'Unknown File';
             
             return CinematicScreen(
-              filePath: filePath,
-              fileName: fileName,
+              type: type,
+              path: path,
+              fileName: name,
             );
           },
         ),
