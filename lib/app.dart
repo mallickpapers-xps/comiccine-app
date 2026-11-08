@@ -17,10 +17,17 @@ class ComicCineApp extends StatelessWidget {
           builder: (context, state) => const LibraryScreen(),
         ),
         GoRoute(
-          path: '/cinematic/:comicId',
-          builder: (context, state) => CinematicScreen(
-            comicId: state.pathParameters['comicId']!,
-          ),
+          path: '/cinematic',
+          builder: (context, state) {
+            // Query parameters থেকে পাথ এবং নাম বের করা
+            final filePath = state.uri.queryParameters['path'] ?? 'Unknown Path';
+            final fileName = state.uri.queryParameters['name'] ?? 'Unknown File';
+            
+            return CinematicScreen(
+              filePath: filePath,
+              fileName: fileName,
+            );
+          },
         ),
       ],
     );
